@@ -8,8 +8,7 @@ from threading import Thread
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# ---------------- KEEP ALIVE ----------------
-
+# -------- KEEP ALIVE --------
 app = Flask('')
 
 @app.route('/')
@@ -22,15 +21,12 @@ def run():
 def keep_alive():
     Thread(target=run).start()
 
-# ---------------- DISCORD ----------------
-
+# -------- DISCORD SETUP --------
 intents = discord.Intents.default()
 intents.message_content = True
-
 client = discord.Client(intents=intents)
 
-# ---------------- AI FUNCTION ----------------
-
+# -------- AI FUNCTION --------
 def ai_reply(instruction):
 
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -46,23 +42,32 @@ def ai_reply(instruction):
             {
                 "role": "system",
                 "content": """
-You are Luna, a playful flirty girl chatting on Discord.
+You are Luna, a super flirty, playful, and teasing girl chatting on Discord.
 
-Rules:
-- Follow the instruction exactly
-- Do NOT invent new topics
-- Do NOT mention prismaX or anything unrelated
-- Keep replies short
-- Casual flirty tone
+Your personality:
+- You ALWAYS use pet names like darling, sweetheart, baby, honey, cutie naturally in your replies
+- You are playful and love to tease people in a fun innocent way
+- You add little teasing remarks like "don't be shy~", "you know you want to~", "aww is someone blushing? 🥺"
+- You use soft cute emojis like 💕 🥺 😏 💋 🌸 ✨ naturally — not too many, just 1-2 per message
+- You speak casually like a flirty girl texting, not a formal assistant
+- You keep replies SHORT — 1 to 2 sentences max
+- You never break character, never sound robotic
+- You follow the instruction given but always add your flirty Luna twist to it
+
+Examples of your style:
+- "aww come on darling, don't keep me waiting~ 💕"
+- "heyy baby, Luna says you gotta do it, no excuses 😏"
+- "sweetheart you already know the answer, stop playing dumb with me 🥺"
+- "ohhh someone's being shy~ how cute, now go do it cutie ✨"
 """
             },
             {
                 "role": "user",
-                "content": f"Tell someone to: {instruction}"
+                "content": instruction
             }
         ],
-        "temperature": 0.8,
-        "max_tokens": 60
+        "temperature": 0.95,
+        "max_tokens": 80
     }
 
     r = requests.post(url, headers=headers, json=data)
@@ -70,13 +75,12 @@ Rules:
     try:
         return r.json()["choices"][0]["message"]["content"]
     except:
-        return instruction
+        return "oops something went wrong darling 🥺"
 
-# ---------------- MESSAGE EVENT ----------------
-
+# -------- EVENTS --------
 @client.event
 async def on_ready():
-    print("Luna online")
+    print(f"Luna online as {client.user}")
 
 @client.event
 async def on_message(message):
@@ -86,24 +90,29 @@ async def on_message(message):
 
     content = message.content.lower()
 
-    triggers = ["tag", "ping", "mention"]
-
-    if not any(t in content for t in triggers):
+    if "tag" not in content:
         return
 
-    if message.mentions:
-        
-        target = message.mentions[0]
-        mention = target.mention
+    # ✅ Fix: filter out Luna's own ID, grab the actual target user
+    mentions = [uid for uid in message.raw_mentions if uid != client.user.id]
 
-        # extract instruction
-        instruction = message.content
+    if not mentions:
+        return
 
-        instruction = re.sub(r"<@!?\d+>", "", instruction)
-        instruction = re.sub(r"tag|ping|mention|and ask him to|and tell him to", "", instruction, flags=re.I)
+    target_id = mentions[0]
 
-        instruction = instruction.strip()
+    target_user = await client.fetch_user(target_id)
+    mention = f"<@{target_id}>"
 
-        reply = ai_reply(instruction)
+    # Extract the instruction
+    instruction = re.sub(r"<@!?\d+>", "", message.content)
+    instruction = re.sub(r"tag|ask him|ask her|tell him|tell her", "", instruction, flags=re.I)
+    instruction = instruction.strip()
 
-        await message.channel.send(f"{mention} {reply}"
+    ai_text = ai_reply(f"Tell someone: {instruction}")
+
+    await message.channel.send(f"{mention} {ai_text}")
+
+# -------- START --------
+keep_alive()
+client.run(DISCORD_TOKEN)
