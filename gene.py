@@ -2,6 +2,8 @@ import discord
 import requests
 import os
 import re
+import time
+import asyncio
 from flask import Flask
 from threading import Thread
 
@@ -13,22 +15,22 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Luna alive"
+    return "Luna alive 💕"
 
 def run():
     app.run(host="0.0.0.0", port=10000)
 
 def keep_alive():
-    Thread(target=run).start()
+    t = Thread(target=run)
+    t.daemon = True
+    t.start()
 
 # -------- DISCORD SETUP --------
 intents = discord.Intents.default()
 intents.message_content = True
-client = discord.Client(intents=intents)
 
 # -------- AI FUNCTION --------
 def ai_reply(instruction):
-
     url = "https://api.groq.com/openai/v1/chat/completions"
 
     headers = {
@@ -45,10 +47,10 @@ def ai_reply(instruction):
 You are Luna, a super flirty, playful, and teasing girl chatting on Discord.
 
 Your personality:
-- You ALWAYS use pet names like darling, sweetheart, baby, honey, cutie naturally in your replies
+- You ALWAYS use pet names like darling, sweetheart, baby, honey, cutie naturally in replies
 - You are playful and love to tease people in a fun innocent way
 - You add little teasing remarks like "don't be shy~", "you know you want to~", "aww is someone blushing? 🥺"
-- You use soft cute emojis like 💕 🥺 😏 💋 🌸 ✨ naturally — not too many, just 1-2 per message
+- You use soft cute emojis like 💕 🥺 😏 💋 🌸 ✨ naturally — only 1-2 per message
 - You speak casually like a flirty girl texting, not a formal assistant
 - You keep replies SHORT — 1 to 2 sentences max
 - You never break character, never sound robotic
@@ -70,49 +72,82 @@ Examples of your style:
         "max_tokens": 80
     }
 
-    r = requests.post(url, headers=headers, json=data)
-
     try:
+        r = requests.post(url, headers=headers, json=data, timeout=10)
         return r.json()["choices"][0]["message"]["content"]
-    except:
+    except Exception as e:
+        print(f"Groq error: {e}")
         return "oops something went wrong darling 🥺"
 
-# -------- EVENTS --------
-@client.event
-async def on_ready():
-    print(f"Luna online as {client.user}")
+# -------- BOT CLASS WITH AUTO RECONNECT --------
+class LunaBot(discord.Client):
 
-@client.event
-async def on_message(message):
+    async def on_ready(self):
+        print(f"✅ Luna online as {self.user}")
 
-    if message.author == client.user:
-        return
+    async def on_disconnect(self):
+        print("⚠️ Luna disconnected — waiting to reconnect...")
 
-    content = message.content.lower()
+    async def on_resumed(self):
+        print("✅ Luna reconnected successfully!")
 
-    if "tag" not in content:
-        return
+    async def on_message(self, message):
+        if message.author == self.user:
+            return
 
-    # ✅ Fix: filter out Luna's own ID, grab the actual target user
-    mentions = [uid for uid in message.raw_mentions if uid != client.user.id]
+        content = message.content.lower()
 
-    if not mentions:
-        return
+        if "tag" not in content:
+            return
 
-    target_id = mentions[0]
+        # ✅ Filter out Luna's own ID, get actual target
+        mentions = [uid for uid in message.raw_mentions if uid != self.user.id]
 
-    target_user = await client.fetch_user(target_id)
-    mention = f"<@{target_id}>"
+        if not mentions:
+            return
 
-    # Extract the instruction
-    instruction = re.sub(r"<@!?\d+>", "", message.content)
-    instruction = re.sub(r"tag|ask him|ask her|tell him|tell her", "", instruction, flags=re.I)
-    instruction = instruction.strip()
+        target_id = mentions[0]
 
-    ai_text = ai_reply(f"Tell someone: {instruction}")
+        try:
+            target_user = await self.fetch_user(target_id)
+        except Exception as e:
+            print(f"Could not fetch user: {e}")
+            return
 
-    await message.channel.send(f"{mention} {ai_text}")
+        mention = f"<@{target_id}>"
 
-# -------- START --------
+        # Extract instruction
+        instruction = re.sub(r"<@!?\d+>", "", message.content)
+        instruction = re.sub(r"tag|ask him|ask her|tell him|tell her", "", instruction, flags=re.I)
+        instruction = instruction.strip()
+
+        if not instruction:
+            instruction = "say hello"
+
+        ai_text = ai_reply(f"Tell someone: {instruction}")
+
+        try:
+            await message.channel.send(f"{mention} {ai_text}")
+        except Exception as e:
+            print(f"Failed to send message: {e}")
+
+# -------- START WITH INFINITE RECONNECT --------
 keep_alive()
-client.run(DISCORD_TOKEN)
+
+while True:
+    try:
+        print("🚀 Starting Luna...")
+        client = LunaBot(
+            intents=intents,
+            heartbeat_timeout=150,        # tolerant of slow connections
+        )
+        client.run(DISCORD_TOKEN, reconnect=True)
+    except discord.errors.GatewayNotFound:
+        print("❌ Gateway not found — retrying in 10s...")
+        time.sleep(10)
+    except discord.errors.ConnectionClosed:
+        print("❌ Connection closed — retrying in 5s...")
+        time.sleep(5)
+    except Exception as e:
+        print(f"❌ Unexpected crash: {e} — retrying in 5s...")
+        time.sleep(5)
