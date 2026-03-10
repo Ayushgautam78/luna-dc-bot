@@ -8,7 +8,7 @@ from threading import Thread
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# ---------- KEEP ALIVE ----------
+# ---------- KEEP ALIVE (FOR RENDER) ----------
 app = Flask('')
 
 @app.route('/')
@@ -24,10 +24,9 @@ def keep_alive():
 # ---------- DISCORD ----------
 intents = discord.Intents.default()
 intents.message_content = True
-
 client = discord.Client(intents=intents)
 
-# ---------- AI ----------
+# ---------- AI FUNCTION ----------
 def ai_reply(instruction):
 
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -43,16 +42,13 @@ def ai_reply(instruction):
             {
                 "role": "system",
                 "content": """
-You are Luna, a playful flirty girl chatting in a Discord server.
-
-Personality:
-Confident, teasing, playful.
+You are Luna, a playful flirty girl chatting in Discord.
 
 Rules:
 - Follow the instruction exactly.
-- Do not invent new topics.
-- Short replies (1 sentence).
-- Flirty tone using words like baby, darling, handsome sometimes.
+- Do NOT change topic.
+- Reply in ONE short sentence.
+- Be slightly flirty using words like baby, darling, handsome.
 - Speak casually like a Discord user.
 """
             },
@@ -61,7 +57,7 @@ Rules:
                 "content": instruction
             }
         ],
-        "temperature": 0.9,
+        "temperature": 0.8,
         "max_tokens": 60
     }
 
@@ -72,11 +68,12 @@ Rules:
     except:
         return instruction
 
-# ---------- EVENTS ----------
 
+# ---------- EVENTS ----------
 @client.event
 async def on_ready():
     print(f"Luna online as {client.user}")
+
 
 @client.event
 async def on_message(message):
@@ -86,32 +83,34 @@ async def on_message(message):
 
     content = message.content.lower()
 
-    # Only trigger on tag commands
+    # Trigger only when user says tag
     if "tag" not in content:
         return
 
-    # Ensure user actually mentioned someone
-    if not message.raw_mentions:
+    # Ensure someone was mentioned
+    if not message.mentions:
         return
 
-    target_id = message.raw_mentions[0]
+    target_user = message.mentions[0]
 
-    # prevent tagging itself
-    if target_id == client.user.id:
+    # Prevent bot tagging itself
+    if target_user.id == client.user.id:
         return
 
-    target_user = await client.fetch_user(target_id)
+    mention = target_user.mention
 
-    mention = f"<@{target_id}>"
-
-    # extract instruction
+    # Extract instruction text
     instruction = re.sub(r"<@!?\d+>", "", message.content)
     instruction = re.sub(r"tag|ask him|ask her|tell him|tell her|and", "", instruction, flags=re.I)
     instruction = instruction.strip()
 
-    ai_text = ai_reply(f"Tell someone to: {instruction}")
+    if instruction == "":
+        return
+
+    ai_text = ai_reply(instruction)
 
     await message.channel.send(f"{mention} {ai_text}")
+
 
 # ---------- START ----------
 keep_alive()
