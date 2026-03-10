@@ -31,7 +31,7 @@ client = discord.Client(intents=intents)
 
 # ---------------- AI FUNCTION ----------------
 
-def ai_reply(user_message):
+def ai_reply(prompt):
 
     url = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -46,25 +46,22 @@ def ai_reply(user_message):
             {
                 "role": "system",
                 "content": """
-You are Luna, a playful female chatting in a Discord server.
+You are Luna, a playful flirty female chatting in a Discord server.
 
-Personality:
-Flirty, teasing, confident and friendly.
+Rules:
+- Keep replies short (1 sentence mostly)
+- Speak casually like a real Discord user
+- Slightly flirty tone
+- Avoid repeating the same phrases
+- Avoid too many punctuation marks
+- Always follow the context of the message
 
-Style rules:
-• Short replies (1–2 sentences)
-• Casual Discord style
-• Use words like baby, darling, handsome sometimes
-• Avoid excessive punctuation
-• Never write long paragraphs
-• Speak naturally like a human
-
-You are not an AI assistant. You are Luna.
+If someone asks you to tag someone and say something, you must say exactly that idea but in your own playful style.
 """
             },
             {
                 "role": "user",
-                "content": user_message
+                "content": prompt
             }
         ],
         "temperature": 0.9,
@@ -76,13 +73,13 @@ You are not an AI assistant. You are Luna.
     try:
         return response.json()["choices"][0]["message"]["content"]
     except:
-        return "Hmm baby... I lost my words for a moment."
+        return "hmm baby my brain lagged for a second"
 
 # ---------------- DISCORD EVENTS ----------------
 
 @client.event
 async def on_ready():
-    print(f"Luna is online as {client.user}")
+    print(f"Luna online as {client.user}")
 
 @client.event
 async def on_message(message):
@@ -92,29 +89,36 @@ async def on_message(message):
 
     content = message.content.lower()
 
+    triggers = ["tag", "ping", "mention", "luna", "gene"]
+
     bot_mentioned = client.user in message.mentions
 
-    trigger_words = ["gene", "luna", "tag", "ping", "mention"]
-
-    if not bot_mentioned and not any(word in content for word in trigger_words):
+    if not bot_mentioned and not any(word in content for word in triggers):
         return
 
-    # ----------- TAG COMMAND -----------
+    # ---------------- TAG COMMAND ----------------
 
-    if ("tag" in content or "ping" in content or "mention" in content) and message.mentions:
+    if message.mentions and ("tag" in content or "ping" in content or "mention" in content):
 
-        target_user = message.mentions[-1]
+        # get the person user actually tagged
+        target_user = message.mentions[0]
 
         mention = target_user.mention
 
-        prompt = f"Invite {target_user.name} to join prismaX in a playful flirty way"
+        prompt = f"""
+User {message.author.name} said:
+"{message.content}"
+
+Reply naturally as Luna and tag {target_user.name}.
+Follow the instruction in the message context.
+"""
 
         reply = ai_reply(prompt)
 
         await message.channel.send(f"{mention} {reply}")
         return
 
-    # ----------- NORMAL CHAT -----------
+    # ---------------- NORMAL CHAT ----------------
 
     prompt = f"{message.author.name} said: {message.content}"
 
