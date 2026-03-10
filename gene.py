@@ -1,37 +1,39 @@
 import discord
 import requests
 import os
-import threading
 from flask import Flask
+from threading import Thread
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-GROQ_KEY = os.getenv("GROQ_API_KEY")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# ---------- KEEP ALIVE SERVER ----------
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Luna is alive"
+
+def run():
+    app.run(host="0.0.0.0", port=10000)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# ---------- DISCORD SETUP ----------
 intents = discord.Intents.default()
 intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-# -------- Flask server for uptime pings -------- #
-
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Gene bot is alive"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-# -------- AI reply using Groq -------- #
-
-def ai_reply(message):
+# ---------- AI FUNCTION ----------
+def ai_reply(prompt):
 
     url = "https://api.groq.com/openai/v1/chat/completions"
 
     headers = {
-        "Authorization": f"Bearer {GROQ_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -40,27 +42,40 @@ def ai_reply(message):
         "messages": [
             {
                 "role": "system",
-                "content": "You are Gene, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful."
+                "content": """
+You are Luna, a playful and confident female in a Discord server.
+
+Personality:
+You are flirty, playful, teasing and charming.
+You like using words like baby, darling, handsome, cutie, love.
+
+Rules:
+Keep replies short (1-2 sentences).
+Speak naturally like a real Discord user.
+Avoid too many commas or punctuation.
+Never sound like an AI assistant.
+"""
             },
             {
                 "role": "user",
-                "content": message
+                "content": prompt
             }
         ],
-        "temperature": 1,
+        "temperature": 0.9,
         "max_tokens": 80
     }
 
-    r = requests.post(url, headers=headers, json=data)
-    result = r.json()
+    response = requests.post(url, headers=headers, json=data)
 
-    return result["choices"][0]["message"]["content"]
+    try:
+        return response.json()["choices"][0]["message"]["content"]
+    except:
+        return "Hmm baby... I lost my words for a second."
 
-# -------- Discord events -------- #
-
+# ---------- DISCORD EVENTS ----------
 @client.event
 async def on_ready():
-    print(f"Gene is online as {client.user}")
+    print(f"Luna is online as {client.user}")
 
 @client.event
 async def on_message(message):
@@ -68,18 +83,36 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    text = message.content.lower()
+    content = message.content.lower()
 
-    trigger_words = ["gene", "ping", "tag", "mention", "hey gene"]
+    triggers = ["gene", "luna", "tag", "ping", "mention"]
 
-    if any(word in text for word in trigger_words) or client.user in message.mentions:
+    bot_mentioned = client.user in message.mentions
 
-        reply = ai_reply(message.content)
+    if not bot_mentioned and not any(word in content for word in triggers):
+        return
 
-        await message.reply(reply)
+    # ---------- TAGGING ----------
+    if message.mentions and ("tag" in content or "ping" in content or "mention" in content):
 
-# -------- Start both servers -------- #
+        user = message.mentions[0]
+        mention = user.mention
 
-threading.Thread(target=run_web).start()
+        prompt = f"Invite {user.name} to join prismaX in a flirty way"
 
-client.run(TOKEN)
+        reply = ai_reply(prompt)
+
+        await message.channel.send(f"{mention} {reply}")
+        return
+
+    # ---------- NORMAL CHAT ----------
+    prompt = f"{message.author.name} said: {message.content}"
+
+    reply = ai_reply(prompt)
+
+    await message.reply(reply)
+
+
+# ---------- START ----------
+keep_alive()
+client.run(DISCORD_TOKEN)
