@@ -7,7 +7,8 @@ from threading import Thread
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# ---------- KEEP ALIVE SERVER ----------
+# ---------------- KEEP ALIVE SERVER ----------------
+
 app = Flask('')
 
 @app.route('/')
@@ -21,14 +22,16 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# ---------- DISCORD SETUP ----------
+# ---------------- DISCORD SETUP ----------------
+
 intents = discord.Intents.default()
 intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-# ---------- AI FUNCTION ----------
-def ai_reply(prompt):
+# ---------------- AI FUNCTION ----------------
+
+def ai_reply(user_message):
 
     url = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -43,22 +46,25 @@ def ai_reply(prompt):
             {
                 "role": "system",
                 "content": """
-You are Luna, a playful and confident female in a Discord server.
+You are Luna, a playful female chatting in a Discord server.
 
 Personality:
-You are flirty, playful, teasing and charming.
-You like using words like baby, darling, handsome, cutie, love.
+Flirty, teasing, confident and friendly.
 
-Rules:
-Keep replies short (1-2 sentences).
-Speak naturally like a real Discord user.
-Avoid too many commas or punctuation.
-Never sound like an AI assistant.
+Style rules:
+• Short replies (1–2 sentences)
+• Casual Discord style
+• Use words like baby, darling, handsome sometimes
+• Avoid excessive punctuation
+• Never write long paragraphs
+• Speak naturally like a human
+
+You are not an AI assistant. You are Luna.
 """
             },
             {
                 "role": "user",
-                "content": prompt
+                "content": user_message
             }
         ],
         "temperature": 0.9,
@@ -70,9 +76,10 @@ Never sound like an AI assistant.
     try:
         return response.json()["choices"][0]["message"]["content"]
     except:
-        return "Hmm baby... I lost my words for a second."
+        return "Hmm baby... I lost my words for a moment."
 
-# ---------- DISCORD EVENTS ----------
+# ---------------- DISCORD EVENTS ----------------
+
 @client.event
 async def on_ready():
     print(f"Luna is online as {client.user}")
@@ -85,34 +92,37 @@ async def on_message(message):
 
     content = message.content.lower()
 
-    triggers = ["gene", "luna", "tag", "ping", "mention"]
-
     bot_mentioned = client.user in message.mentions
 
-    if not bot_mentioned and not any(word in content for word in triggers):
+    trigger_words = ["gene", "luna", "tag", "ping", "mention"]
+
+    if not bot_mentioned and not any(word in content for word in trigger_words):
         return
 
-    # ---------- TAGGING ----------
-    if message.mentions and ("tag" in content or "ping" in content or "mention" in content):
+    # ----------- TAG COMMAND -----------
 
-        user = message.mentions[0]
-        mention = user.mention
+    if ("tag" in content or "ping" in content or "mention" in content) and message.mentions:
 
-        prompt = f"Invite {user.name} to join prismaX in a flirty way"
+        target_user = message.mentions[-1]
+
+        mention = target_user.mention
+
+        prompt = f"Invite {target_user.name} to join prismaX in a playful flirty way"
 
         reply = ai_reply(prompt)
 
         await message.channel.send(f"{mention} {reply}")
         return
 
-    # ---------- NORMAL CHAT ----------
+    # ----------- NORMAL CHAT -----------
+
     prompt = f"{message.author.name} said: {message.content}"
 
     reply = ai_reply(prompt)
 
     await message.reply(reply)
 
+# ---------------- START BOT ----------------
 
-# ---------- START ----------
 keep_alive()
 client.run(DISCORD_TOKEN)
