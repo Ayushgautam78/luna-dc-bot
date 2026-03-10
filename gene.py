@@ -3,7 +3,6 @@ import requests
 import os
 import re
 import time
-import asyncio
 from flask import Flask
 from threading import Thread
 
@@ -21,13 +20,12 @@ def run():
     app.run(host="0.0.0.0", port=10000)
 
 def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
+    Thread(target=run).start()
 
 # -------- DISCORD SETUP --------
 intents = discord.Intents.default()
 intents.message_content = True
+client = discord.Client(intents=intents)
 
 # -------- AI FUNCTION --------
 def ai_reply(instruction):
@@ -79,75 +77,53 @@ Examples of your style:
         print(f"Groq error: {e}")
         return "oops something went wrong darling 🥺"
 
-# -------- BOT CLASS WITH AUTO RECONNECT --------
-class LunaBot(discord.Client):
+# -------- EVENTS --------
+@client.event
+async def on_ready():
+    print(f"✅ Luna online as {client.user}")
 
-    async def on_ready(self):
-        print(f"✅ Luna online as {self.user}")
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
 
-    async def on_disconnect(self):
-        print("⚠️ Luna disconnected — waiting to reconnect...")
+    print(f"📩 Got message: {message.content}")
 
-    async def on_resumed(self):
-        print("✅ Luna reconnected successfully!")
+    content = message.content.lower()
 
-    async def on_message(self, message):
-        if message.author == self.user:
-            return
+    if "tag" not in content:
+        return
 
-        content = message.content.lower()
+    # ✅ Filter out Luna's own ID, get actual target
+    mentions = [uid for uid in message.raw_mentions if uid != client.user.id]
 
-        if "tag" not in content:
-            return
+    if not mentions:
+        return
 
-        # ✅ Filter out Luna's own ID, get actual target
-        mentions = [uid for uid in message.raw_mentions if uid != self.user.id]
+    target_id = mentions[0]
+    mention = f"<@{target_id}>"
 
-        if not mentions:
-            return
+    # Extract instruction
+    instruction = re.sub(r"<@!?\d+>", "", message.content)
+    instruction = re.sub(r"tag|ask him|ask her|tell him|tell her", "", instruction, flags=re.I)
+    instruction = instruction.strip()
 
-        target_id = mentions[0]
+    if not instruction:
+        instruction = "say hello"
 
-        try:
-            target_user = await self.fetch_user(target_id)
-        except Exception as e:
-            print(f"Could not fetch user: {e}")
-            return
+    ai_text = ai_reply(f"Tell someone: {instruction}")
+    await message.channel.send(f"{mention} {ai_text}")
 
-        mention = f"<@{target_id}>"
-
-        # Extract instruction
-        instruction = re.sub(r"<@!?\d+>", "", message.content)
-        instruction = re.sub(r"tag|ask him|ask her|tell him|tell her", "", instruction, flags=re.I)
-        instruction = instruction.strip()
-
-        if not instruction:
-            instruction = "say hello"
-
-        ai_text = ai_reply(f"Tell someone: {instruction}")
-
-        try:
-            await message.channel.send(f"{mention} {ai_text}")
-        except Exception as e:
-            print(f"Failed to send message: {e}")
-
-# -------- START WITH INFINITE RECONNECT --------
+# -------- START --------
 keep_alive()
 
 while True:
     try:
         print("🚀 Starting Luna...")
-        client = LunaBot(
-            intents=intents,
-            heartbeat_timeout=150,        # tolerant of slow connections
-        )
         client.run(DISCORD_TOKEN, reconnect=True)
-    except discord.errors.GatewayNotFound:
-        print("❌ Gateway not found — retrying in 10s...")
-        time.sleep(10)
-    except discord.errors.ConnectionClosed:
-        print("❌ Connection closed — retrying in 5s...")
-        time.sleep(5)
     except Exception as e:
-        print(f"❌ Unexpected crash: {e} — retrying in 5s...")
+        print(f"❌ Crashed: {e} — restarting in 5s...")
         time.sleep(5)
+        client = discord.Client(intents=intents)
+        client.event(on_ready)
+        client.event(on_message)
