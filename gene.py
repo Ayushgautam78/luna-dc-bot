@@ -33,23 +33,25 @@ def get_crypto_price(query):
             coin_id = r["coins"][0]["id"]
             name = r["coins"][0]["name"]
             
-            # Fetch detailed coin data
-            coin_data = requests.get(f"https://api.coingecko.com/api/v3/coins/{coin_id}").json()
-            market_data = coin_data.get("market_data", {})
+            rank = r["coins"][0].get("market_cap_rank", "N/A")
             
-            usd_price = market_data.get("current_price", {}).get("usd", "N/A")
-            market_cap = market_data.get("market_cap", {}).get("usd", "N/A")
-            fdv = market_data.get("fully_diluted_valuation", {}).get("usd", "N/A")
-            price_change_24h = market_data.get("price_change_percentage_24h", "N/A")
-            rank = coin_data.get("market_cap_rank", "N/A")
-            
-            info = f"**{name}** (Rank: {rank})\n"
-            info += f"💰 **Price:** ${usd_price} USD\n"
-            info += f"📊 **Market Cap:** ${market_cap}\n"
-            info += f"📈 **FDV:** ${fdv}\n"
-            info += f"📅 **24h Change:** {price_change_24h}%"
-            
-            return info
+            p = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_change=true").json()
+            if coin_id in p:
+                data = p[coin_id]
+                usd_price = data.get("usd", "N/A")
+                
+                market_cap = data.get("usd_market_cap", "N/A")
+                if isinstance(market_cap, (int, float)): market_cap = f"${market_cap:,.0f}"
+                
+                price_change_24h = data.get("usd_24h_change", "N/A")
+                if isinstance(price_change_24h, (int, float)): price_change_24h = round(price_change_24h, 2)
+                
+                info = f"**{name}** (Rank: {rank})\n"
+                info += f"💰 **Price:** ${usd_price} USD\n"
+                info += f"📊 **Market Cap:** {market_cap}\n"
+                info += f"📅 **24h Change:** {price_change_24h}%"
+                
+                return info
     except Exception as e:
         print(f"Error fetching price: {e}", flush=True)
     return "I couldn't find any data for that coin!"
@@ -59,7 +61,7 @@ def get_crypto_news():
         r = requests.get("https://min-api.cryptocompare.com/data/v2/news/?lang=EN").json()
         news = r.get("Data", [])[:3]
         if news:
-            headlines = [f"• [{n['title']}]({n['url']})" for n in news]
+            headlines = [f"• {n['title']} (<{n['url']}>)" for n in news]
             return "**Latest Crypto News:**\n" + "\n".join(headlines)
     except Exception as e:
         print(f"Error fetching news: {e}", flush=True)
@@ -83,7 +85,7 @@ def ai_reply(message):
         "messages": [
             {
                 "role": "system",
-                "content": "You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT RULES: 1) ONLY tag a user if the user EXPLICITLY asks you to. Otherwise, just reply normally without any @tags! 2) You will see raw Discord tags in the text like <@12345678>. You MUST copy that exact tag string into your reply to mention them! NEVER make up random numbers for a tag, and NEVER tag yourself."
+                "content": "You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT RULES: 1) NEVER EVER output a Discord tag like <@12345678> in your response unless the user EXPLICITLY commands you to 'tag' someone. 2) NEVER tag yourself."
             },
             {
                 "role": "user",
