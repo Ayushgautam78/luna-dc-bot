@@ -29,59 +29,7 @@ def run_web():
 def get_crypto_price(query):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     
-    # Primary: CoinMarketCap (Has FDV, Name, Rank)
-    try:
-        symbol_query = query.upper()
-        lower_query = query.lower()
-        
-        # Find the exact slug for the requested token
-        m_res = requests.get('https://api.coinmarketcap.com/data-api/v3/map/all?cryptoAux=is_active,status', headers=headers).json()
-        
-        if "data" in m_res and "cryptoCurrencyMap" in m_res["data"]:
-            slug = None
-            name = None
-            rank = "N/A"
-            symbol = symbol_query
-            
-            for p in m_res["data"]["cryptoCurrencyMap"]:
-                if (p["symbol"] == symbol_query or p["slug"] == lower_query or p["name"].lower() == lower_query) and p.get("status") == "active":
-                    slug = p["slug"]
-                    name = p["name"]
-                    rank = p.get("rank", "N/A")
-                    symbol = p["symbol"]
-                    break
-            
-            if slug:
-                # Fetch detailed stats using the slug
-                c_res = requests.get(f"https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail?slug={slug}", headers=headers).json()
-                if "data" in c_res and "statistics" in c_res["data"]:
-                    stats = c_res["data"]["statistics"]
-                    usd_price = stats.get("price", "N/A")
-                    if isinstance(usd_price, (int, float)):
-                        usd_price = round(usd_price, 4) if usd_price > 0.0001 else usd_price
-                        
-                    change = stats.get("priceChangePercentage24h", "N/A")
-                    if isinstance(change, (int, float)): change = round(change, 2)
-                    
-                    market_cap = stats.get("marketCap", "N/A")
-                    if isinstance(market_cap, (int, float)) and market_cap > 0: market_cap = f"${int(market_cap):,}"
-                    else: market_cap = "N/A"
-                    
-                    fdv = stats.get("fullyDilutedMarketCap", "N/A")
-                    if isinstance(fdv, (int, float)) and fdv > 0: fdv = f"${int(fdv):,}"
-                    else: fdv = "N/A"
-                    
-                    info = f"**{name} ({symbol})** (Rank: {rank})\n"
-                    info += f"💰 **Price:** ${usd_price} USD\n"
-                    if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
-                    if fdv != "N/A": info += f"📈 **FDV:** {fdv}\n"
-                    info += f"📅 **24h Change:** {change}%"
-                    
-                    return info
-    except Exception as e:
-        print(f"CoinMarketCap Error fetching price: {e}", flush=True)
-
-    # Fallback: CoinGecko (Lacks FDV due to simple endpoint)
+    # Primary: CoinGecko
     try:
         r = requests.get(f"https://api.coingecko.com/api/v3/search?query={query}", headers=headers).json()
         if r.get("coins"):
@@ -110,6 +58,39 @@ def get_crypto_price(query):
                 return info
     except Exception as e:
         print(f"CoinGecko Error fetching price: {e}", flush=True)
+
+    # Fallback to CryptoCompare if CoinGecko is rate-limiting
+    try:
+        symbol = query.upper()
+        c_res = requests.get(f"https://min-api.cryptocompare.com/data/pricemultifull?fsyms={symbol}&tsyms=USD", headers=headers).json()
+        
+        if "RAW" in c_res and symbol in c_res["RAW"]:
+            data = c_res["RAW"][symbol]["USD"]
+            
+            usd_price = data.get("PRICE", "N/A")
+            if isinstance(usd_price, (int, float)):
+                usd_price = round(usd_price, 4) if usd_price > 0.0001 else usd_price
+                
+            change = data.get("CHANGEPCT24HOUR", "N/A")
+            if isinstance(change, (int, float)): change = round(change, 2)
+            
+            market_cap = data.get("CIRCULATINGSUPPLYMKTCAP", "N/A")
+            if isinstance(market_cap, (int, float)) and market_cap > 0: market_cap = f"${int(market_cap):,}"
+            else: market_cap = "N/A"
+            
+            fdv = data.get("MKTCAP", "N/A")
+            if isinstance(fdv, (int, float)) and fdv > 0: fdv = f"${int(fdv):,}"
+            else: fdv = "N/A"
+            
+            info = f"**{symbol}** (CryptoCompare Data)\n"
+            info += f"💰 **Price:** ${usd_price}\n"
+            if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
+            if fdv != "N/A": info += f"📈 **FDV:** {fdv}\n"
+            info += f"📅 **24h Change:** {change}%"
+            
+            return info
+    except Exception as e:
+        print(f"CryptoCompare Error fetching price: {e}", flush=True)
 
     return f"I couldn't find any data for `{query}`! (The crypto APIs might be blocking me right now)"
 
