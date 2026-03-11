@@ -56,26 +56,38 @@ def get_crypto_price(query):
     except Exception as e:
         print(f"CoinGecko Error fetching price: {e}", flush=True)
         
-    # Fallback to KuCoin API if CoinGecko is rate-limiting
+    # Fallback to DexScreener if CoinGecko is rate-limiting
     try:
-        symbol = query.upper()
-        if symbol.endswith("USDT"):
-            symbol = symbol[:-4]
-            
-        k_res = requests.get(f"https://api.kucoin.com/api/v1/market/stats?symbol={symbol}-USDT").json()
+        d_res = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={query}", headers=headers).json()
         
-        if k_res.get("code") == "200000" and k_res.get("data"):
-            data = k_res["data"]
-            usd_price = round(float(data["last"]), 4)
-            change = round(float(data["changeRate"]) * 100, 2)
+        if d_res.get("pairs"):
+            pair = d_res["pairs"][0]
+            name = pair.get("baseToken", {}).get("name", query.upper())
+            symbol = pair.get("baseToken", {}).get("symbol", query.upper())
             
-            info = f"**{symbol}** (Alternative Data)\n"
-            info += f"💰 **Price:** ${usd_price} USD\n"
+            usd_price = pair.get("priceUsd", "N/A")
+            if usd_price != "N/A":
+                usd_price = round(float(usd_price), 4) if float(usd_price) > 0.0001 else float(usd_price)
+                
+            change = pair.get("priceChange", {}).get("h24", "N/A")
+            market_cap = pair.get("marketCap", "N/A")
+            fdv = pair.get("fdv", "N/A")
+            
+            if isinstance(market_cap, (int, float)) and market_cap > 0: market_cap = f"${int(market_cap):,}"
+            elif market_cap == 0: market_cap = "N/A"
+                
+            if isinstance(fdv, (int, float)) and fdv > 0: fdv = f"${int(fdv):,}"
+            elif fdv == 0: fdv = "N/A"
+            
+            info = f"**{name} ({symbol})** (DEX Data)\n"
+            info += f"💰 **Price:** ${usd_price}\n"
+            if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
+            if fdv != "N/A": info += f"📈 **FDV:** {fdv}\n"
             info += f"📅 **24h Change:** {change}%"
             
             return info
     except Exception as e:
-        print(f"KuCoin Error fetching price: {e}", flush=True)
+        print(f"DexScreener Error fetching price: {e}", flush=True)
 
     return f"I couldn't find any data for `{query}`! (The crypto APIs might be blocking me right now)"
 
