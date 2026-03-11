@@ -28,45 +28,27 @@ def run_web():
 
 def get_crypto_price(query):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    
+    # Primary: CoinMarketCap (Has FDV, Name, Rank)
     try:
-        r = requests.get(f"https://api.coingecko.com/api/v3/search?query={query}", headers=headers).json()
-        if r.get("coins"):
-            coin_id = r["coins"][0]["id"]
-            name = r["coins"][0]["name"]
-            
-            rank = r["coins"][0].get("market_cap_rank", "N/A")
-            
-            p = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_change=true", headers=headers).json()
-            if coin_id in p:
-                data = p[coin_id]
-                usd_price = data.get("usd", "N/A")
-                
-                market_cap = data.get("usd_market_cap", "N/A")
-                if isinstance(market_cap, (int, float)): market_cap = f"${market_cap:,.0f}"
-                
-                price_change_24h = data.get("usd_24h_change", "N/A")
-                if isinstance(price_change_24h, (int, float)): price_change_24h = round(price_change_24h, 2)
-                
-                info = f"**{name}** (Rank: {rank})\n"
-                info += f"💰 **Price:** ${usd_price} USD\n"
-                info += f"📊 **Market Cap:** {market_cap}\n"
-                info += f"📅 **24h Change:** {price_change_24h}%"
-                
-                return info
-    except Exception as e:
-        print(f"CoinGecko Error fetching price: {e}", flush=True)
+        symbol_query = query.upper()
+        lower_query = query.lower()
         
-    # Fallback to CoinMarketCap if CoinGecko is rate-limiting
-    try:
-        symbol = query.upper()
         # Find the exact slug for the requested token
         m_res = requests.get('https://api.coinmarketcap.com/data-api/v3/map/all?cryptoAux=is_active,status', headers=headers).json()
         
         if "data" in m_res and "cryptoCurrencyMap" in m_res["data"]:
             slug = None
+            name = None
+            rank = "N/A"
+            symbol = symbol_query
+            
             for p in m_res["data"]["cryptoCurrencyMap"]:
-                if p["symbol"] == symbol and p.get("status") == "active":
+                if (p["symbol"] == symbol_query or p["slug"] == lower_query or p["name"].lower() == lower_query) and p.get("status") == "active":
                     slug = p["slug"]
+                    name = p["name"]
+                    rank = p.get("rank", "N/A")
+                    symbol = p["symbol"]
                     break
             
             if slug:
@@ -82,13 +64,15 @@ def get_crypto_price(query):
                     if isinstance(change, (int, float)): change = round(change, 2)
                     
                     market_cap = stats.get("marketCap", "N/A")
-                    if isinstance(market_cap, (int, float)): market_cap = f"${int(market_cap):,}"
+                    if isinstance(market_cap, (int, float)) and market_cap > 0: market_cap = f"${int(market_cap):,}"
+                    else: market_cap = "N/A"
                     
                     fdv = stats.get("fullyDilutedMarketCap", "N/A")
-                    if isinstance(fdv, (int, float)): fdv = f"${int(fdv):,}"
+                    if isinstance(fdv, (int, float)) and fdv > 0: fdv = f"${int(fdv):,}"
+                    else: fdv = "N/A"
                     
-                    info = f"**{symbol}** (CoinMarketCap Data)\n"
-                    info += f"💰 **Price:** ${usd_price}\n"
+                    info = f"**{name} ({symbol})** (Rank: {rank})\n"
+                    info += f"💰 **Price:** ${usd_price} USD\n"
                     if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
                     if fdv != "N/A": info += f"📈 **FDV:** {fdv}\n"
                     info += f"📅 **24h Change:** {change}%"
@@ -96,6 +80,36 @@ def get_crypto_price(query):
                     return info
     except Exception as e:
         print(f"CoinMarketCap Error fetching price: {e}", flush=True)
+
+    # Fallback: CoinGecko (Lacks FDV due to simple endpoint)
+    try:
+        r = requests.get(f"https://api.coingecko.com/api/v3/search?query={query}", headers=headers).json()
+        if r.get("coins"):
+            coin_id = r["coins"][0]["id"]
+            name = r["coins"][0]["name"]
+            symbol = r["coins"][0].get("symbol", "").upper()
+            rank = r["coins"][0].get("market_cap_rank", "N/A")
+            
+            p = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_change=true", headers=headers).json()
+            if coin_id in p:
+                data = p[coin_id]
+                usd_price = data.get("usd", "N/A")
+                
+                market_cap = data.get("usd_market_cap", "N/A")
+                if isinstance(market_cap, (int, float)) and market_cap > 0: market_cap = f"${market_cap:,.0f}"
+                else: market_cap = "N/A"
+                
+                price_change_24h = data.get("usd_24h_change", "N/A")
+                if isinstance(price_change_24h, (int, float)): price_change_24h = round(price_change_24h, 2)
+                
+                info = f"**{name} ({symbol})** (Rank: {rank})\n"
+                info += f"💰 **Price:** ${usd_price} USD\n"
+                if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
+                info += f"📅 **24h Change:** {price_change_24h}%"
+                
+                return info
+    except Exception as e:
+        print(f"CoinGecko Error fetching price: {e}", flush=True)
 
     return f"I couldn't find any data for `{query}`! (The crypto APIs might be blocking me right now)"
 
