@@ -27,15 +27,16 @@ def run_web():
 # -------- Crypto APIs -------- #
 
 def get_crypto_price(query):
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     try:
-        r = requests.get(f"https://api.coingecko.com/api/v3/search?query={query}").json()
+        r = requests.get(f"https://api.coingecko.com/api/v3/search?query={query}", headers=headers).json()
         if r.get("coins"):
             coin_id = r["coins"][0]["id"]
             name = r["coins"][0]["name"]
             
             rank = r["coins"][0].get("market_cap_rank", "N/A")
             
-            p = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_change=true").json()
+            p = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_change=true", headers=headers).json()
             if coin_id in p:
                 data = p[coin_id]
                 usd_price = data.get("usd", "N/A")
@@ -53,16 +54,36 @@ def get_crypto_price(query):
                 
                 return info
     except Exception as e:
-        print(f"Error fetching price: {e}", flush=True)
-    return "I couldn't find any data for that coin!"
+        print(f"CoinGecko Error fetching price: {e}", flush=True)
+        
+    # Fallback to Binance API if CoinGecko is rate-limiting
+    try:
+        symbol = query.upper()
+        if not symbol.endswith("USDT"):
+            symbol += "USDT"
+        b_res = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}").json()
+        
+        if "lastPrice" in b_res:
+            usd_price = round(float(b_res["lastPrice"]), 4)
+            change = round(float(b_res["priceChangePercent"]), 2)
+            
+            info = f"**{query.upper()}** (Binance Data)\n"
+            info += f"💰 **Price:** ${usd_price} USD\n"
+            info += f"📅 **24h Change:** {change}%"
+            
+            return info
+    except Exception as e:
+        print(f"Binance Error fetching price: {e}", flush=True)
+
+    return f"I couldn't find any data for `{query}`! (The API might be blocking me right now)"
 
 def get_crypto_news():
     try:
         r = requests.get("https://min-api.cryptocompare.com/data/v2/news/?lang=EN").json()
-        news = r.get("Data", [])[:3]
+        news = r.get("Data", [])[:6]
         if news:
-            headlines = [f"• {n['title']} (<{n['url']}>)" for n in news]
-            return "**Latest Crypto News:**\n" + "\n".join(headlines)
+            headlines = [f"• {n['title']}" for n in news]
+            return "**Latest Crypto News (Top 6):**\n" + "\n".join(headlines)
     except Exception as e:
         print(f"Error fetching news: {e}", flush=True)
     return "I couldn't fetch the news right now!"
