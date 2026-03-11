@@ -56,26 +56,46 @@ def get_crypto_price(query):
     except Exception as e:
         print(f"CoinGecko Error fetching price: {e}", flush=True)
         
-    # Fallback to CryptoCompare if CoinGecko is rate-limiting
+    # Fallback to CoinMarketCap if CoinGecko is rate-limiting
     try:
         symbol = query.upper()
-        c_res = requests.get(f"https://min-api.cryptocompare.com/data/pricemultifull?fsyms={symbol}&tsyms=USD").json()
+        # Find the exact slug for the requested token
+        m_res = requests.get('https://api.coinmarketcap.com/data-api/v3/map/all?cryptoAux=is_active,status', headers=headers).json()
         
-        if "DISPLAY" in c_res and symbol in c_res["DISPLAY"]:
-            data = c_res["DISPLAY"][symbol]["USD"]
+        if "data" in m_res and "cryptoCurrencyMap" in m_res["data"]:
+            slug = None
+            for p in m_res["data"]["cryptoCurrencyMap"]:
+                if p["symbol"] == symbol and p.get("status") == "active":
+                    slug = p["slug"]
+                    break
             
-            usd_price = data.get("PRICE", "N/A")
-            change = data.get("CHANGEPCT24HOUR", "N/A")
-            market_cap = data.get("MKTCAP", "N/A")
-            
-            info = f"**{symbol}** (CryptoCompare Data)\n"
-            info += f"💰 **Price:** {usd_price}\n"
-            if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
-            info += f"📅 **24h Change:** {change}%"
-            
-            return info
+            if slug:
+                # Fetch detailed stats using the slug
+                c_res = requests.get(f"https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail?slug={slug}", headers=headers).json()
+                if "data" in c_res and "statistics" in c_res["data"]:
+                    stats = c_res["data"]["statistics"]
+                    usd_price = stats.get("price", "N/A")
+                    if isinstance(usd_price, (int, float)):
+                        usd_price = round(usd_price, 4) if usd_price > 0.0001 else usd_price
+                        
+                    change = stats.get("priceChangePercentage24h", "N/A")
+                    if isinstance(change, (int, float)): change = round(change, 2)
+                    
+                    market_cap = stats.get("marketCap", "N/A")
+                    if isinstance(market_cap, (int, float)): market_cap = f"${int(market_cap):,}"
+                    
+                    fdv = stats.get("fullyDilutedMarketCap", "N/A")
+                    if isinstance(fdv, (int, float)): fdv = f"${int(fdv):,}"
+                    
+                    info = f"**{symbol}** (CoinMarketCap Data)\n"
+                    info += f"💰 **Price:** ${usd_price}\n"
+                    if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
+                    if fdv != "N/A": info += f"📈 **FDV:** {fdv}\n"
+                    info += f"📅 **24h Change:** {change}%"
+                    
+                    return info
     except Exception as e:
-        print(f"CryptoCompare Error fetching price: {e}", flush=True)
+        print(f"CoinMarketCap Error fetching price: {e}", flush=True)
 
     return f"I couldn't find any data for `{query}`! (The crypto APIs might be blocking me right now)"
 
