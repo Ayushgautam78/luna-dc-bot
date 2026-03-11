@@ -56,26 +56,28 @@ def get_crypto_price(query):
     except Exception as e:
         print(f"CoinGecko Error fetching price: {e}", flush=True)
         
-    # Fallback to Binance API if CoinGecko is rate-limiting
+    # Fallback to KuCoin API if CoinGecko is rate-limiting
     try:
         symbol = query.upper()
-        if not symbol.endswith("USDT"):
-            symbol += "USDT"
-        b_res = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}").json()
-        
-        if "lastPrice" in b_res:
-            usd_price = round(float(b_res["lastPrice"]), 4)
-            change = round(float(b_res["priceChangePercent"]), 2)
+        if symbol.endswith("USDT"):
+            symbol = symbol[:-4]
             
-            info = f"**{query.upper()}** (Binance Data)\n"
+        k_res = requests.get(f"https://api.kucoin.com/api/v1/market/stats?symbol={symbol}-USDT").json()
+        
+        if k_res.get("code") == "200000" and k_res.get("data"):
+            data = k_res["data"]
+            usd_price = round(float(data["last"]), 4)
+            change = round(float(data["changeRate"]) * 100, 2)
+            
+            info = f"**{symbol}** (Alternative Data)\n"
             info += f"💰 **Price:** ${usd_price} USD\n"
             info += f"📅 **24h Change:** {change}%"
             
             return info
     except Exception as e:
-        print(f"Binance Error fetching price: {e}", flush=True)
+        print(f"KuCoin Error fetching price: {e}", flush=True)
 
-    return f"I couldn't find any data for `{query}`! (The API might be blocking me right now)"
+    return f"I couldn't find any data for `{query}`! (The crypto APIs might be blocking me right now)"
 
 def get_crypto_news():
     try:
