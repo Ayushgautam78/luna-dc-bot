@@ -3,7 +3,7 @@ import requests
 import os
 import threading
 from flask import Flask
-
+import re
 TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 
@@ -23,6 +23,47 @@ def home():
 def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
+# -------- Crypto APIs -------- #
+
+def get_crypto_price(query):
+    try:
+        r = requests.get(f"https://api.coingecko.com/api/v3/search?query={query}").json()
+        if r.get("coins"):
+            coin_id = r["coins"][0]["id"]
+            name = r["coins"][0]["name"]
+            
+            # Fetch detailed coin data
+            coin_data = requests.get(f"https://api.coingecko.com/api/v3/coins/{coin_id}").json()
+            market_data = coin_data.get("market_data", {})
+            
+            usd_price = market_data.get("current_price", {}).get("usd", "N/A")
+            market_cap = market_data.get("market_cap", {}).get("usd", "N/A")
+            fdv = market_data.get("fully_diluted_valuation", {}).get("usd", "N/A")
+            price_change_24h = market_data.get("price_change_percentage_24h", "N/A")
+            rank = coin_data.get("market_cap_rank", "N/A")
+            
+            info = f"**{name}** (Rank: {rank})\n"
+            info += f"💰 **Price:** ${usd_price} USD\n"
+            info += f"📊 **Market Cap:** ${market_cap}\n"
+            info += f"📈 **FDV:** ${fdv}\n"
+            info += f"📅 **24h Change:** {price_change_24h}%"
+            
+            return info
+    except Exception as e:
+        print(f"Error fetching price: {e}", flush=True)
+    return "I couldn't find any data for that coin!"
+
+def get_crypto_news():
+    try:
+        r = requests.get("https://min-api.cryptocompare.com/data/v2/news/?lang=EN").json()
+        news = r.get("Data", [])[:3]
+        if news:
+            headlines = [f"• [{n['title']}]({n['url']})" for n in news]
+            return "**Latest Crypto News:**\n" + "\n".join(headlines)
+    except Exception as e:
+        print(f"Error fetching news: {e}", flush=True)
+    return "I couldn't fetch the news right now!"
 
 # -------- AI reply using Groq -------- #
 
@@ -45,12 +86,15 @@ def ai_reply(message):
             
     user_content = f"{message.author.display_name} says: {message.content}\n\n{mentions_info}"
 
+            
+    user_content = f"{message.author.display_name} says: {message.content}\n\n{mentions_info}"
+
     data = {
         "model": "llama-3.1-8b-instant",
         "messages": [
             {
                 "role": "system",
-                "content": f"You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT: If you want to tag or mention someone, you MUST use their exact ping format (like <@1234567890>) from the context. Do not invent names or numbers! NEVER tag or mention yourself."
+                "content": f"You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT RULES: 1) ONLY tag or mention a user if the user EXPLICITLY asks you to. Otherwise, just reply normally without any @tags! 2) Make sure to only use the exact Discord IDs provided in the 'Context of mentioned users'. NEVER make up random numbers for a tag. 3) NEVER tag or mention yourself."
             },
             {
                 "role": "user",
@@ -92,10 +136,37 @@ async def on_message(message):
 
     trigger_words = ["homeless girl", "ping", "tag", "mention", "hey homeless girl"]
 
-    if any(word in text for word in trigger_words) or client.user in message.mentions:
+    has_trigger = any(word in text for word in trigger_words)
+    mentions_bot = client.user in message.mentions
+    has_token = bool(re.search(r'\$([a-zA-Z0-9\-]+)', text))
+    has_news = "news" in text
+    has_price = "price" in text
 
+    # Handle crypto-specific commands (Bypass AI entirely)
+    if has_token or has_price:
+        queries = []
+        token_matches = re.findall(r'\$([a-zA-Z0-9\-]+)', text)
+        queries.extend(token_matches)
+        
+        if not queries:
+            price_match = re.search(r'price\s+(?:of|for)?\s*([a-zA-Z0-9\-]+)', text)
+            if price_match:
+                queries.append(price_match.group(1))
+
+        if queries:
+            replies = []
+            for query in set(queries):
+                replies.append(get_crypto_price(query))
+            await message.reply("\n\n".join(replies))
+            return
+            
+    if has_news:
+        await message.reply(get_crypto_news())
+        return
+
+    # Handle AI Chat
+    if has_trigger or mentions_bot:
         reply = ai_reply(message)
-
         await message.reply(reply)
 
 # -------- Start both servers -------- #
