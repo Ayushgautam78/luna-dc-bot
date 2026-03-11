@@ -54,30 +54,31 @@ def ai_reply(message):
     try:
         r = requests.post(url, headers=headers, json=data)
         if r.status_code != 200:
-            print(f"Groq API Error: {r.status_code} - {r.text}")
+            print(f"Groq API Error: {r.status_code} - {r.text}", flush=True)
             return "Oops! I'm having a little brain freeze right now. 🧊"
         
         result = r.json()
         return result["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"Error in ai_reply: {e}")
+        print(f"Error in ai_reply: {e}", flush=True)
         return "Oops! I couldn't think of a reply right now, baby. 🥺"
 
 # -------- Discord events -------- #
 
 @client.event
 async def on_ready():
-    print(f"Gene is online as {client.user}")
+    print(f"Gene is online as {client.user}", flush=True)
 
 @client.event
 async def on_message(message):
+    print(f"[DEBUG] Event triggered by {message.author}", flush=True)
 
     if message.author == client.user:
         return
 
     text = message.content.lower()
 
-    print(f"[DEBUG] Received message from {message.author}: '{text}'")
+    print(f"[DEBUG] Received message from {message.author}: '{text}'", flush=True)
 
     trigger_words = ["gene", "ping", "tag", "mention", "hey gene"]
 
