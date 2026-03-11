@@ -1,38 +1,37 @@
 import discord
 import requests
 import os
-import re
+import threading
 from flask import Flask
-from threading import Thread
 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+TOKEN = os.getenv("DISCORD_TOKEN")
+GROQ_KEY = os.getenv("GROQ_API_KEY")
 
-# -------- KEEP ALIVE --------
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Luna alive"
-
-def run():
-    app.run(host="0.0.0.0", port=10000)
-
-def keep_alive():
-    Thread(target=run).start()
-
-# -------- DISCORD SETUP --------
 intents = discord.Intents.default()
 intents.message_content = True
+
 client = discord.Client(intents=intents)
 
-# -------- AI FUNCTION --------
-def ai_reply(instruction):
+# -------- Flask server for uptime pings -------- #
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Gene bot is alive"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+# -------- AI reply using Groq -------- #
+
+def ai_reply(message):
 
     url = "https://api.groq.com/openai/v1/chat/completions"
 
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {GROQ_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -41,36 +40,34 @@ def ai_reply(instruction):
         "messages": [
             {
                 "role": "system",
-                "content": """
-You are Luna, a playful flirty girl chatting in Discord.
-
-Rules:
-- Follow the instruction exactly
-- Do not invent new topics
-- Short casual replies
-- Slightly playful tone
-"""
+                "content": "You are Gene, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful."
             },
             {
                 "role": "user",
-                "content": instruction
+                "content": message
             }
         ],
-        "temperature": 0.8,
-        "max_tokens": 60
+        "temperature": 1,
+        "max_tokens": 80
     }
 
-    r = requests.post(url, headers=headers, json=data)
-
     try:
-        return r.json()["choices"][0]["message"]["content"]
-    except:
-        return instruction
+        r = requests.post(url, headers=headers, json=data)
+        if r.status_code != 200:
+            print(f"Groq API Error: {r.status_code} - {r.text}")
+            return "Oops! I'm having a little brain freeze right now. 🧊"
+        
+        result = r.json()
+        return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"Error in ai_reply: {e}")
+        return "Oops! I couldn't think of a reply right now, baby. 🥺"
 
-# -------- EVENTS --------
+# -------- Discord events -------- #
+
 @client.event
 async def on_ready():
-    print(f"Luna online as {client.user}")
+    print(f"Gene is online as {client.user}")
 
 @client.event
 async def on_message(message):
@@ -78,33 +75,20 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    content = message.content.lower()
+    text = message.content.lower()
 
-    if "tag" not in content:
-        return
+    print(f"[DEBUG] Received message from {message.author}: '{text}'")
 
-    # use raw_mentions to get the exact tagged user
-    if not message.raw_mentions:
-        return
+    trigger_words = ["gene", "ping", "tag", "mention", "hey gene"]
 
-    target_id = message.raw_mentions[0]
+    if any(word in text for word in trigger_words) or client.user in message.mentions:
 
-    if target_id == client.user.id:
-        return
+        reply = ai_reply(message.content)
 
-    target_user = await client.fetch_user(target_id)
+        await message.reply(reply)
 
-    mention = f"<@{target_id}>"
+# -------- Start both servers -------- #
 
-    # extract instruction
-    instruction = re.sub(r"<@!?\d+>", "", message.content)
-    instruction = re.sub(r"tag|ask him|ask her|tell him|tell her", "", instruction, flags=re.I)
-    instruction = instruction.strip()
+threading.Thread(target=run_web).start()
 
-    ai_text = ai_reply(f"Tell someone to: {instruction}")
-
-    await message.channel.send(f"{mention} {ai_text}")
-
-# -------- START --------
-keep_alive()
-client.run(DISCORD_TOKEN)
+client.run(TOKEN)
