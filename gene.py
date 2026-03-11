@@ -56,38 +56,26 @@ def get_crypto_price(query):
     except Exception as e:
         print(f"CoinGecko Error fetching price: {e}", flush=True)
         
-    # Fallback to DexScreener if CoinGecko is rate-limiting
+    # Fallback to CryptoCompare if CoinGecko is rate-limiting
     try:
-        d_res = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={query}", headers=headers).json()
+        symbol = query.upper()
+        c_res = requests.get(f"https://min-api.cryptocompare.com/data/pricemultifull?fsyms={symbol}&tsyms=USD").json()
         
-        if d_res.get("pairs"):
-            pair = d_res["pairs"][0]
-            name = pair.get("baseToken", {}).get("name", query.upper())
-            symbol = pair.get("baseToken", {}).get("symbol", query.upper())
+        if "DISPLAY" in c_res and symbol in c_res["DISPLAY"]:
+            data = c_res["DISPLAY"][symbol]["USD"]
             
-            usd_price = pair.get("priceUsd", "N/A")
-            if usd_price != "N/A":
-                usd_price = round(float(usd_price), 4) if float(usd_price) > 0.0001 else float(usd_price)
-                
-            change = pair.get("priceChange", {}).get("h24", "N/A")
-            market_cap = pair.get("marketCap", "N/A")
-            fdv = pair.get("fdv", "N/A")
+            usd_price = data.get("PRICE", "N/A")
+            change = data.get("CHANGEPCT24HOUR", "N/A")
+            market_cap = data.get("MKTCAP", "N/A")
             
-            if isinstance(market_cap, (int, float)) and market_cap > 0: market_cap = f"${int(market_cap):,}"
-            elif market_cap == 0: market_cap = "N/A"
-                
-            if isinstance(fdv, (int, float)) and fdv > 0: fdv = f"${int(fdv):,}"
-            elif fdv == 0: fdv = "N/A"
-            
-            info = f"**{name} ({symbol})** (DEX Data)\n"
-            info += f"💰 **Price:** ${usd_price}\n"
+            info = f"**{symbol}** (CryptoCompare Data)\n"
+            info += f"💰 **Price:** {usd_price}\n"
             if market_cap != "N/A": info += f"📊 **Market Cap:** {market_cap}\n"
-            if fdv != "N/A": info += f"📈 **FDV:** {fdv}\n"
             info += f"📅 **24h Change:** {change}%"
             
             return info
     except Exception as e:
-        print(f"DexScreener Error fetching price: {e}", flush=True)
+        print(f"CryptoCompare Error fetching price: {e}", flush=True)
 
     return f"I couldn't find any data for `{query}`! (The crypto APIs might be blocking me right now)"
 
@@ -163,14 +151,14 @@ async def on_message(message):
     trigger_words = ["homeless girl", "ping", "tag", "mention", "hey homeless girl"]
 
     is_directed_at_bot = any(word in text for word in trigger_words) or client.user in message.mentions
-    has_token = bool(re.search(r'\$([a-zA-Z0-9\-]+)', text))
+    has_token = bool(re.search(r'\$([a-zA-Z]+[a-zA-Z0-9\-]*)', text))
     has_news = "news" in text and is_directed_at_bot
     has_price = "price" in text and is_directed_at_bot
 
     # Handle crypto-specific commands (Bypass AI entirely)
     if has_token or has_price:
         queries = []
-        token_matches = re.findall(r'\$([a-zA-Z0-9\-]+)', text)
+        token_matches = re.findall(r'\$([a-zA-Z]+[a-zA-Z0-9\-]*)', text)
         queries.extend(token_matches)
         
         if not queries and is_directed_at_bot:
