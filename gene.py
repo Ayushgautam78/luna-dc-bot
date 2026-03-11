@@ -37,9 +37,11 @@ def ai_reply(message):
 
     mentions_info = ""
     if message.mentions:
-        mentions_info = "Context of mentioned users:\n"
-        for user in message.mentions:
-            mentions_info += f"- {user.display_name} = <@{user.id}>\n"
+        valid_mentions = [user for user in message.mentions if user != client.user]
+        if valid_mentions:
+            mentions_info = "Context of mentioned users:\n"
+            for user in valid_mentions:
+                mentions_info += f"- {user.display_name} = <@{user.id}>\n"
             
     user_content = f"{message.author.display_name} says: {message.content}\n\n{mentions_info}"
 
@@ -48,7 +50,7 @@ def ai_reply(message):
         "messages": [
             {
                 "role": "system",
-                "content": "You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT: If you want to tag or mention someone, you MUST use their exact ping format (like <@1234567890>) from the context. Do not invent names or numbers!"
+                "content": f"You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT: If you want to tag or mention someone, you MUST use their exact ping format (like <@1234567890>) from the context. Do not invent names or numbers! NEVER tag or mention yourself."
             },
             {
                 "role": "user",
