@@ -18,7 +18,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Gene bot is alive"
+    return "Homeless Girl bot is alive"
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
@@ -35,20 +35,28 @@ def ai_reply(message):
         "Content-Type": "application/json"
     }
 
+    mentions_info = ""
+    if message.mentions:
+        mentions_info = "Context of mentioned users:\n"
+        for user in message.mentions:
+            mentions_info += f"- {user.display_name} = <@{user.id}>\n"
+            
+    user_content = f"{message.author.display_name} says: {message.content}\n\n{mentions_info}"
+
     data = {
         "model": "llama-3.1-8b-instant",
         "messages": [
             {
                 "role": "system",
-                "content": "You are Gene, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful."
+                "content": "You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT: If you want to tag or mention someone, you MUST use their exact ping format (like <@1234567890>) from the context. Do not invent names or numbers!"
             },
             {
                 "role": "user",
-                "content": message
+                "content": user_content
             }
         ],
         "temperature": 1,
-        "max_tokens": 80
+        "max_tokens": 150
     }
 
     try:
@@ -67,7 +75,7 @@ def ai_reply(message):
 
 @client.event
 async def on_ready():
-    print(f"Gene is online as {client.user}", flush=True)
+    print(f"Homeless Girl is online as {client.user}", flush=True)
 
 @client.event
 async def on_message(message):
@@ -80,11 +88,11 @@ async def on_message(message):
 
     print(f"[DEBUG] Received message from {message.author}: '{text}'", flush=True)
 
-    trigger_words = ["gene", "ping", "tag", "mention", "hey gene"]
+    trigger_words = ["homeless girl", "ping", "tag", "mention", "hey homeless girl"]
 
     if any(word in text for word in trigger_words) or client.user in message.mentions:
 
-        reply = ai_reply(message.content)
+        reply = ai_reply(message)
 
         await message.reply(reply)
 
