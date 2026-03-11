@@ -76,25 +76,14 @@ def ai_reply(message):
         "Content-Type": "application/json"
     }
 
-    mentions_info = ""
-    if message.mentions:
-        valid_mentions = [user for user in message.mentions if user != client.user]
-        if valid_mentions:
-            mentions_info = "Context of mentioned users:\n"
-            for user in valid_mentions:
-                mentions_info += f"- {user.display_name} = <@{user.id}>\n"
-            
-    user_content = f"{message.author.display_name} says: {message.content}\n\n{mentions_info}"
-
-            
-    user_content = f"{message.author.display_name} says: {message.content}\n\n{mentions_info}"
+    user_content = f"{message.author.display_name} says: {message.content}"
 
     data = {
         "model": "llama-3.1-8b-instant",
         "messages": [
             {
                 "role": "system",
-                "content": f"You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT RULES: 1) ONLY tag or mention a user if the user EXPLICITLY asks you to. Otherwise, just reply normally without any @tags! 2) Make sure to only use the exact Discord IDs provided in the 'Context of mentioned users'. NEVER make up random numbers for a tag. 3) NEVER tag or mention yourself."
+                "content": "You are Homeless Girl, a playful flirty girl chatting in a Discord server. Speak casually and affectionately using words like baby, darling, sweetheart, love and handsome. Keep replies short and playful. IMPORTANT RULES: 1) ONLY tag a user if the user EXPLICITLY asks you to. Otherwise, just reply normally without any @tags! 2) You will see raw Discord tags in the text like <@12345678>. You MUST copy that exact tag string into your reply to mention them! NEVER make up random numbers for a tag, and NEVER tag yourself."
             },
             {
                 "role": "user",
@@ -136,11 +125,10 @@ async def on_message(message):
 
     trigger_words = ["homeless girl", "ping", "tag", "mention", "hey homeless girl"]
 
-    has_trigger = any(word in text for word in trigger_words)
-    mentions_bot = client.user in message.mentions
+    is_directed_at_bot = any(word in text for word in trigger_words) or client.user in message.mentions
     has_token = bool(re.search(r'\$([a-zA-Z0-9\-]+)', text))
-    has_news = "news" in text
-    has_price = "price" in text
+    has_news = "news" in text and is_directed_at_bot
+    has_price = "price" in text and is_directed_at_bot
 
     # Handle crypto-specific commands (Bypass AI entirely)
     if has_token or has_price:
@@ -148,7 +136,7 @@ async def on_message(message):
         token_matches = re.findall(r'\$([a-zA-Z0-9\-]+)', text)
         queries.extend(token_matches)
         
-        if not queries:
+        if not queries and is_directed_at_bot:
             price_match = re.search(r'price\s+(?:of|for)?\s*([a-zA-Z0-9\-]+)', text)
             if price_match:
                 queries.append(price_match.group(1))
@@ -165,7 +153,7 @@ async def on_message(message):
         return
 
     # Handle AI Chat
-    if has_trigger or mentions_bot:
+    if is_directed_at_bot:
         reply = ai_reply(message)
         await message.reply(reply)
 
